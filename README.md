@@ -6,6 +6,10 @@
 
 这个 repo 用于存放个人翻译的一些文章。旨在对于知识的学习积累。
 
+## Ready
+
+[What is a meta-class in Objective-C?](http://www.cocoawithlove.com/2010/01/what-is-meta-class-in-objective-c.html)
+
 ## Content
 
 ## MIT License
