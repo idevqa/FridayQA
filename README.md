@@ -1,18 +1,17 @@
-# iOS-Dev-Translation
+# Friday Q&A
 
 --- 
 
 ## Description
 
-这个 repo 用于存放个人翻译的一些文章。旨在对于知识的学习积累。
+[mikeash](https://www.mikeash.com/)'s Friday Q&A translation. 
 
 ## Ready
 
-[What is a meta-class in Objective-C?](http://www.cocoawithlove.com/2010/01/what-is-meta-class-in-objective-c.html)
+| 日期 | 原文 | 译文 |
+| ------| ------ | ------ |
+| 2014-11-07 | [Let's Build NSZombie](https://www.mikeash.com/pyblog/friday-qa-2014-11-07-lets-build-nszombie.html) | 实现 NSZombie |
 
-[Non-pointer isa](http://www.sealiesoftware.com/blog/archive/2013/09/24/objc_explain_Non-pointer_isa.html)
-
-[iOS Assembly Tutorial: Understanding ARM](https://www.raywenderlich.com/37181/ios-assembly-tutorial)
 
 ## Content
 
