@@ -6,14 +6,12 @@
 
 [mikeash](https://www.mikeash.com/)'s Friday Q&A translation. 
 
-## Ready
+## Content
 
 | 日期 | 原文 | 译文 |
 | ------| ------ | ------ |
-| 2014-11-07 | [Let's Build NSZombie](https://www.mikeash.com/pyblog/friday-qa-2014-11-07-lets-build-nszombie.html) | 实现 NSZombie |
+| 2014-11-07 | [Let's Build NSZombie](https://www.mikeash.com/pyblog/friday-qa-2014-11-07-lets-build-nszombie.html) | [实现 NSZombie](https://github.com/Desgard/FridayQA/blob/master/2014/2014-11-07.md) |
 
-
-## Content
 
 ## MIT License
 
