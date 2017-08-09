@@ -1,10 +1,12 @@
-# Friday Q&A
+![Friday Q & A](banner.png)
 
---- 
+（图片设计：[冬瓜](http://desgard.com)）
 
 ## Description
 
 [mikeash](https://www.mikeash.com/)'s Friday Q&A translation. 
+
+这个博客是本人非常喜欢的一个私人技术博客，博主已经有 iOS 开发 10 余年经验，可以说是最早的一匹 iOS Dev.。博客文章涉及广泛，从硬件底层架构、Cocoa, Foundation 等官方库、语言语法特性、iOS 开发技巧等均有涉及。
 
 ## Content
 
