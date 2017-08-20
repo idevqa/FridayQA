@@ -1,0 +1,236 @@
+---
+title: "Friday Q&A 2017-07-14: Swift.Codable"
+description: Swift 4 中有趣的扩展之一就是 `Codable` 协议和其组合策略。这也就是我最近十分关注的一个主题，所以今天我们来讨论它是什么，以及它是如何工作的。
+header: "Friday Q&A 2017-07-14: Swift.Codable"
+author: 冬瓜
+---
+
+原文：[Swift.Codable](https://www.mikeash.com/pyblog/friday-qa-2017-07-14-swiftcodable.html)
+
+---
+
+Swift 4 中有趣的扩展之一就是 `Codable` 协议和其组合策略。这也就是我最近十分关注的一个主题，所以今天我们来讨论它是什么，以及它是如何工作的。
+
+## 序列化 - Serialization
+
+将值类型对象序列化后存储至磁盘上或是通过为网络进行传输是十分常见的需求。尤其现在的移动应用时代，再家常便饭不过了。
+
+迄今为止，Apple 的生态系统开发中的序列化选择十分有限：
+
+1. `NSCoding` 提供了对复杂对象的自动序列化方案，并且可以与自定义类兼容，但是十分不适合跨平台数据序列化方案，人就需要手动编写编码和解码的特定方法。
+2. `NSPropertyListSerialization` 和 `NSJSONSerialization` 可以在 Cocoa 中的 `NSDictionary/NSString` 或属性列表(property list)与 JSON 格式数据进行转换。JSON 十分适用于与服务器的数据交互。由于在广大的 API 中有很多外层值是不必要的，因此需要编写很多代码用于提取有意义的值。这些代码总是具有 ad-hoc 特点（译者认为代表的是耦合性极强，仅适用于单一场景的意思），并且处理其他可能性数据具有较差的兼容性。
+3. `NSXMLParser` 和 `NSXMLDocument` 是适用于 XML 为数据格式传输的系统中。但是对于数据的解析以及模型转换规则仍旧需要开发者来自行实现。
+4. 最后，完全自己实现编码转换。这是很有趣的过程，但是工作量巨大且容易出错。
+
+这些往往会导致大量的模式代码，首先你需要声明一个 `String` 类型的属性命名为 `foo`，通过传输来的数据，搜索键为 `foo` 的值并解码，以 `String` 类型存储下来。当失败是遍抛出异常。然后开始查询 `bar` 为键的值……
+
+开发者自然不喜欢这些重复的过程。重复的事情都应该交给计算机来处理。所以我们希望能有更好的解决办法：
+
+```swift
+struct Whatever {
+   var foo: String
+   var bar: String
+}
+```
+
+并且它是可序列化的。并且需要满足的是：所有必要的信息都需要保留。
+
+反射（Reflection）是实现数据的序列化和反序列化是很常用的方法。许多 Objective-C 的开发者都编写了自动将 Objective-C 对象和 JSON 相互转换的代码。Objective-C Runtime 和 Swift Mirror 提供了所有在操作时所需要的信息。但其做法十分奇怪。
+
+放眼 Apple 生态圈之外的环境，这种语言特性被广大的语言所采纳。但是也导致了很多安全漏洞。（原文中称之为 [hilarious security bugs](https://www.cs.uic.edu/~s/musings/pickle/)）
+
+反射并不是这个问题的最佳解决方案。易出错且易造成安全问题。使用非静态类，所以会在运行时而不是编译时造成更多的错误。并且 debug 过程很难，因为解析代码完全相同，并且使用 metadata 对大量字符串进行查询。
+
+Swift 中采用了 Compile-Time （编译期）的代码生成，而不是在 Runtime 期间的反射机制。这说明编译器将承担大量的工作，但编译出的结果是十分快速的，且静态类型也有易于使用的优势。
+
+## 回顾
+
+Swift 最新的编码组件中有一些基础的协议。
+
+`Encodable` 协议用来做编码。如果想遵循这个协议，并且类中所有的属性都是 `Encodable` 类型的，那么编译器将会自行实现。如果它们不符合你的要求，或需要一些特殊的处理，你也可以自行实现。
+
+`Decodable` 协议一般都会与 `Encodable` 搭配使用，用来做解码。当你希望指定类需要解码需求时，如同 `Encodable` 一样，编译器会自动生成。
+
+由于 `Encodable` 和 `Decodable` 一直都相伴出现，所以 Swift 中使用另外一个协议将它俩粘合在一起：
+
+```swift
+typealias Codable = Decodable & Encodable
+```
+
+这里个协议都很简单。每一个值包含一个要求方法：
+
+```swift
+protocol Encodable {
+   func encode(to encoder: Encoder) throws
+}
+
+protocol Decodable {
+   init(from decoder: Decoder) throws
+}
+```
+
+`Encoder` 和 `Decoder` 协议用来制定对象自身如何编码和解码。不需要担心它的实现，因为 `Codable` 已经帮你处理了所有的细节实现。如果你想使用自己的 `Codable` 的实现来处理，则需要去使用这些。这里比较复杂，我吗稍后再来回顾。
+
+最后，使用 `CodingKey` 协议是用来编码和解码的秘钥。这与之前相比，整个过程中增加了一个静态类型检查部分(static type checking)。首先会提供一个 `String` 类型，并且在指定键中提供 Optional 的 `Int` 类型。
+
+```swift
+protocol CodingKey {
+    var stringValue: String { get }
+    init?(stringValue: String)
+
+    var intValue: Int? { get }
+    public init?(intValue: Int)
+}
+```
+
+## 编码器和解码器
+
+`Encoder` 和 `Decoder` 的概念类似于 `NSCoder`。一个对象调用对应的编码处理器从而执行编码和解码。
+
+`NSCoder` 的 API 十分简单。`NSCoder` 有一系列方法，例如 `encodeObject:forKey: ` 和 `encodeInteger:forKey: ` 可以对对象进行编码。这些实例对象也可以使用 `encodeObject: ` 和 `encodeInteger: ` 这样的方法对不含键值的变量进行编码。
+
+Swift 中的 API 算是一种间接实现。`Encoder` 不带有任何方法来对变量进行编码。它仅仅提供一个容器，用来存储这些编码方案。并按类别区分容器，一个用于含键量编码(keyed coding)，一个用于无键量编码(unkeyed encoding)，还有一个用于单值编码(encoding a single value)。
+
+这样使得操作目的更加明确，更社会适配各种序列号规则。`NSCoder` 只能使用 Apple 的编码格式，所以让其作为中间值即可。`Encoder` 必须通过 `JSON` 这种格式进行工作。如果一个实例使用的是键值格式来描述属性，则需要使用键值编码方式，继而产生一个 `JSON` 集合。如果使用无键量对对象进行描述，则应该产生一个 `JSON` 数组。当对象为空且无编码值那么该如何处理呢？使用 `NSCoder`，将无法得知输出结果。但是使用 `Encoder`，对象实例则会相应一个含键或者无键的容器，编码器可以从中自适配。
+
+`Decoder` 工作方式与其类似。不会直接从值中解码，而是通过容器类型进行解码。同样的，也提供前文的三种容器类型。
+
+由于容器的代码设计，`Encoder` 和 `Decoder` 的协议十分轻量。他们中仅声明了一些属性信息和容器获取的方法：
+
+```swift
+protocol Encoder {
+    var codingPath: [CodingKey?] { get }
+    public var userInfo: [CodingUserInfoKey : Any] { get }
+
+    func container<Key>(keyedBy type: Key.Type)
+        -> KeyedEncodingContainer<Key> where Key : CodingKey
+    func unkeyedContainer() -> UnkeyedEncodingContainer
+    func singleValueContainer() -> SingleValueEncodingContainer
+}
+
+protocol Decoder {
+    var codingPath: [CodingKey?] { get }
+    var userInfo: [CodingUserInfoKey : Any] { get }
+
+    func container<Key>(keyedBy type: Key.Type) throws
+        -> KeyedDecodingContainer<Key> where Key : CodingKey
+    func unkeyedContainer() throws -> UnkeyedDecodingContainer
+    func singleValueContainer() throws -> SingleValueDecodingContainer
+}
+```
+
+复合类型也同样的存在于容器中。可以通过编写 `Codable` 类型的属性来获得对应的容器，但这之前你需要了解一些可以直接编解码的初始类型。对于 `Codable` 来说，`Int`、`Float`、`Double`、`Bool` 和 `String` 这些类型是可以直接支持的。这些基础类型已经可以解决绝大多数类的编解码码方案了。无键容器也支持以上基础类型的编码序列。
+
+除了这些基本的方法之外，还有一些补充方法用来支持特殊用例。`KeyedDecodingContainer` 有着 `decodeIfPresent` 这个方法用来返回一个 Optional 值，代替弃键操作而返回 `nil`。编码容器具有用于弱引用编码方式，在可编码对象的成员中包含可编码对象这一场景时可以使用（用于处理继承引用的复杂图问题）。另外还有一些获取嵌套容器的方案，这些方法运行对整体的层次进行编码。最后在介绍一种可获取 "super" 编码器或解码器的方法，该场景可以使得子类和超类无冲突共存。子类可以在编码的过程中，请求超类的 "super" 编码器进行编码，确保键无冲突。
+
+## Codable 实现
+
+实现 `Codable` 协议十分容易：保证声明的一致性就可以自动生成。
+
+你需要了解当中发生了什么。我们先来看看它最终的生成结果以及需要编写的代码。下面将从一个示例开始讲述 `Codable`：
+
+```swift
+struct Person: Codable {
+    var name: String
+    var age: Int
+    var quest: String
+}
+```
+
+编译器将会生成嵌套在 `Person` 中的 `CodingKeys` 类型。如果来自行编写，这个类型将是这样的：
+
+```swift
+private enum CodingKeys: CodingKey {
+    case name
+    case age
+    case quest
+}
+```
+
+这个示例其名称与 `Persion` 结构体名称相匹配。编译器会为每一个 `CodingKeys` 枚举量自动匹配命名，其中的属性名称亦是如此。
+
+如果我们需要不同的名称，可以通过为 `CodingKeys` 提供自定义命名方案，示例如下：
+
+```swift
+private enum CodingKeys: String, CodingKey {
+    case name = "person_name"
+    case age
+    case quest
+}
+```
+
+这会使得 `name` 属性以 `person_name` 的命名进行编解码。编译器会接受我们自定义的 `CodingKeys` 类型，并同时为 `Codable` 的剩余部分提供默认实现。这也就是说，我们可以对部分属性进行修改，编译器仍然会工作。
+
+编译器还会生成一个用于 `encode(to:)` 和 `init(from:)` 方法的默认实现。`encode(to:)` 方法的实现中能够获得一个含键容器用于属性编码：
+
+```swift
+func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+
+    try container.encode(name, forKey: .name)
+    try container.encode(age, forKey: .age)
+    try container.encode(quest, forKey: .quest)
+}
+```
+
+另外编译器会生成一个 `init(from:)` 方法来保证容器在初始化时的动作：
+
+```swift
+init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+
+    name = try container.decode(String.self, forKey: .name)
+    age = try container.decode(Int.self, forKey: .age)
+    quest = try container.decode(String.self, forKey: .quest)
+}
+```
+
+这就是所有的实现。如同 `CodingKeys` 一样，如果需要定制，可以直接重写实现该方法实现自己的版本。由于这个方法不能对某些属性指定，所以如果需要定制则需要重写整个方法。但是这并不复杂。
+
+手动实现一个适配于 `Person` 结构体的 `Codable` 协议如下所示：
+
+```swift
+extension Person {
+    private enum CodingKeys: CodingKey {
+        case name
+        case age
+        case quest
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        try container.encode(name, forKey: .name)
+        try container.encode(age, forKey: .age)
+        try container.encode(quest, forKey: .quest)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        name = try container.decode(String.self, forKey: .name)
+        age = try container.decode(Int.self, forKey: .age)
+        quest = try container.decode(String.self, forKey: .quest)
+    }
+}
+```
+
+## Encoder 和 Decoder 实现
+
+一般来说不需要自己实现 `Encoder` 或 `Decoder`。Swift 已经为我们提供了 `JSON` 与属性列表的编解码方案，这些已经可以满足我们的日常开发需要。
+
+当然你也可以定制它们，来支持自定义的格式规范。容器协议的实现其实并不难，只是重复性问题。这是一个工程量问题而不是复杂性问题。
+
+如果要实现定制 `Encoder`，你需要实现 `Encoder` 协议以及相关容器的协议。三种容器的协议涉及到了很多重复繁琐的编解码工作以及各个类型的变解码方案。
+
+他们如何工作取决于你的代码实现。`Encoder` 可能会存储正在编码的数据，并告知不同的 `Encoder` 进行编码处理。
+
+实现 `Decoder` 也是类似的。需要加上容器协议即可。`Decoder` 将保存序列化之后的数据，并将请求的结果传递给容器。
+
+我一直在测试一种二进制编码器和解码器来学习这个协议，并希望在之后的文中作为一个例子来讲述如何实现。
+
+## 总结
+
+Swift 4 的 `Codable` API 十分可观，可以简化许多代码。典型的 `JSON` 问题，完全可以交给 Model 来处理，具体的编解码工作交个编译器来完成。特殊情况时，可以实现协议来定制处理方式。
+
+`Encoder` 和 `Decoder` 协议较为复杂这是有理的。通过 `Encoder` 和 `Decoder` 的定制来实现需要的方法，其中的主要实现都是重复而繁琐的。

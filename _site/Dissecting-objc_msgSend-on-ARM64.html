@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<!-- Meta -->
+	<meta charset="UTF-8"/>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+	<meta name="generator" content="Jekyll">
+
+	<title>Friday Q&A 2017-06-30: 深入理解 ARM64 中的 objc_msgSend 实现</title>
+  <meta name="description" content="WWDC 期间，我在 CocoaConf Next Door 上发言，其中一个专题的内容是关于 objc_msgSend 在 ARM64 架构中的实现。所以决定将其撰写成一篇文章并加入至 Friday Q&A 专题中。">
+
+	<!-- CSS & fonts -->
+	<link rel="stylesheet" href="/css/main.css">
+
+	<!-- RSS -->
+	<link href="/atom.xml" type="application/atom+xml" rel="alternate" title="ATOM Feed" />
+
+  <!-- Favicon -->
+  <link rel="shortcut icon" type="image/png" href="img/favicon.png">
+
+</head>
+
+
+<body>
+	<div id="wrap">
+	  	
+	  	<!-- Navigation -->
+	  	<nav id="nav">
+	<div id="nav-list">
+		<a href="//">Home</a>
+
+		<!-- Nav pages -->
+	  
+	    
+	  
+	    
+	      <a href="/about" title="About Us">About Us</a>
+	    
+	  
+	    
+	  
+	    
+	  
+	    
+	  
+	    
+	  
+	    
+	  
+    
+    <!-- Nav links -->
+	  <!-- <a href="https://thereviewindex.com">Site</a>
+<a href="//">Blog</a> -->
+
+
+	</div>
+  
+  <!-- Nav footer -->
+	
+	  <footer>
+	
+	<span>version 1.0.0</span>
+
+</footer>
+	
+
+</nav>
+
+    
+    <!-- Icon menu -->
+	  <a id="nav-menu">
+	  	<div id="menu"></div>
+	  </a>
+
+      <!-- Header -->
+      
+        <header id="header" class="parent justify-spaceBetween">
+  <div class="inner w100 relative">
+    <span class="f-left">  
+      <a href="http://localhost:4000">
+        <h1>
+          <span>Firday</span>Q&A<span></span>
+        </h1>
+      </a>
+    </span>
+    <span id="nav-links" class="absolute right bottom">
+      <!-- Nav pages -->
+	    
+	      
+	    
+	      
+	        <a href="/about" title="About Us">About Us</a>
+	      
+	    
+	      
+	    
+	      
+	    
+	      
+	    
+	      
+	    
+	      
+	    
+      
+      <!-- Nav links -->
+	    <!-- <a href="https://thereviewindex.com">Site</a>
+<a href="//">Blog</a> -->
+
+
+    </span>
+  </div>
+</header>
+
+
+
+
+      
+
+    <!-- Main content -->
+	  <div id="container">
+		  
+		<main>
+
+			<article id="post-page">
+	<h2>Friday Q&A 2017-06-30: 深入理解 ARM64 中的 objc_msgSend 实现</h2>		
+	<time datetime="2017-06-30T00:00:00+08:00" class="by-line">30 Jun 2017</time>
+	<div class="content">
+
+		<p>原文：<a href="https://www.mikeash.com/pyblog/friday-qa-2017-06-30-dissecting-objc_msgsend-on-arm64.html">Dissecting objc_msgSend on ARM64</a></p>
+
+<hr />
+
+<p>我们回来了！WWDC 期间，我在 CocoaConf Next Door 上发言，其中一个专题的内容是关于 <code class="highlighter-rouge">objc_msgSend</code> 在 ARM64 架构中的实现。所以决定将其撰写成一篇文章并加入至 Friday Q&amp;A 专题中。</p>
+
+<h2 id="总览">总览</h2>
+
+<p>每一个 Objective-C 对象都拥有一个类，每个类都有自己的方法列表。每个方法都拥有选择子、一个指向实现的函数指针和一些元数据（metadata）。<code class="highlighter-rouge">objc_msgsend</code> 的工作是使用对象和选择子来查询对应的函数指针，从而跳转到该方法的位置中。</p>
+
+<p>查找的方法可能十分复杂。如果一个方法在当前类中无法查询，那么可能需要在其父类中继续查询。当在父类中也无法找到，则开始调用 runtime 中的消息转发机制。如果这是发送到该类的第一条信息，那么它将会调用该类的 <code class="highlighter-rouge">+initialize</code> 方法。</p>
+
+<p>一般情况下，查找的方法需要迅速完成。这与其复杂的查找机制似乎是矛盾的。</p>
+
+<p>Objective-C 解决这个矛盾的方法是利用<strong>方法缓存(Method Cache)</strong>。每个类都有一个缓存，它将方法存储为一组选择子和函数指针，在 Objective-C 中被称为 IMP。它们被组织成哈希表的结构，所以查找速度十分迅速。当需要查找方法时，runtime 首先会查询缓存。如果结构不被命中，则开始那一套复杂的查询过程，并将结果存储至缓存，以便下次快速查询。</p>
+
+<p><code class="highlighter-rouge">objc_msgSend</code> 是使用汇编语言编写的。其原因是：其一是使用纯 C 是无法编写一个携带未知参数并跳转至任意函数指针的方法。单纯从语言角度来讲，也没有必要增加这样的功能。其二，对于 <code class="highlighter-rouge">objc_msgSend</code> 来说速度是最重要的，只用汇编来实现是十分高效的。</p>
+
+<p>当然，我们也不希望所有的查询过程都是通过汇编来实现。一旦启用了非汇编语言那么就会降低速度。所以我们将消息分成了两个部分，即 <code class="highlighter-rouge">objc_msgSend</code> 的高速路径(fast path)，此处所有的实现使用的是汇编语言，以及缓慢路径(slow path)部分，此处的实现手段均为 C 语言。在高速路径中我们可以查询方法指针的缓存表，如果找到直接跳转。否则，则使用 C 代码来处理这次查询。</p>
+
+<p>因此，整个 <code class="highlighter-rouge">objc_msgSend</code> 的过程大体如下：</p>
+
+<ol>
+  <li>获取传入对象所属的类。</li>
+  <li>获取该类的方法缓存表。</li>
+  <li>使用传入的选择子在缓存中查询。</li>
+  <li>如果缓存中不存在，则调用 C 的慢速代码段。</li>
+  <li>跳转至 <code class="highlighter-rouge">IMP</code> 映射位置的方法。</li>
+</ol>
+
+<p>具体是怎么实现的呢？下面开始分析。</p>
+
+<h2 id="导读">导读</h2>
+
+<p><code class="highlighter-rouge">objc_msgSend</code> 不同的情况有不同的执行路径。从中包含了处理如消息为 <code class="highlighter-rouge">nil</code>(messages to nil)，<em>Tagged pointer</em> 以及哈希表冲突的特殊代码。首相，先来看一个最常见最直观的情况，即消息发送到 <code class="highlighter-rouge">non-nil</code> 和 <code class="highlighter-rouge">non-tagged</code> 的情况，并且该指定函数指针在哈希表中可以直接获得。这里我将会记录遇到这些判断节点的各种情况，之后当我们到达运行终点后在回头看看其他情况。</p>
+
+<p>我将会列出每个指令(instruction)或指令集(group of instructions)，然后讲述它的功能以及调用原因。仅仅去理解每一条提及的指令即可。</p>
+
+<p>每个指令前面都有一个偏移地址。他们就好比一个量化器，来告知程序跳转的位置。</p>
+
+<p>ARM64 有 31 个 64 位寄存器。他们的位置符号从 <code class="highlighter-rouge">x0</code> 到 <code class="highlighter-rouge">x30</code>。当然也可以使用寄存器中 <code class="highlighter-rouge">w0</code> 到 <code class="highlighter-rouge">w30</code> 的低 32 位，他们也是可独立使用的。<code class="highlighter-rouge">x0</code> 到 <code class="highlighter-rouge">x7</code> 前八位用于传递一个函数。这意味着 <code class="highlighter-rouge">objc_msgSend</code> 在 <code class="highlighter-rouge">x0</code> 中接收到选择子，在 <code class="highlighter-rouge">x1</code> 中接收 <code class="highlighter-rouge">_cmd</code> 参数。</p>
+
+<pre><code class="language-x8086">0x0000 cmp     x0, #0x0
+0x0004 b.le    0x6c
+</code></pre>
+
+<p>如果此处的值小于或等于 0，则 self 与 0 的比较，并在其他位置进行跳转。零代表着 <code class="highlighter-rouge">nil</code>，因此这会使得转发的消息也赋为 <code class="highlighter-rouge">nil</code>。这也是处理 <code class="highlighter-rouge">Tagged Pointers</code> 的方案。<code class="highlighter-rouge">Tagged Pointers</code> 在 ARM64 上通过在高位来存储数据。（不同于 x86-64 ，其是在低位进行存储。）当高位被占用时，则被解释为存储的是一个有符号整数，且为负。当仅仅是普通指针的情况，程序不会运行到此处。</p>
+
+<pre><code class="language-x8086">0x0008 ldr    x13, [x0]
+</code></pre>
+
+<blockquote>
+  <p>译者注：ARM 中的 <code class="highlighter-rouge">LDR</code> 为加载指令。<code class="highlighter-rouge">LDR   R0，[R1]</code> 的意思是 <strong>将存储器地址为 R1 的字数据读入存储器 R0</strong>。<code class="highlighter-rouge">LDR</code> 指令用于从存储器中将一个 32 （ARM64 架构则为 64 位，后者相同）位字数据传送到目的存储器中。该指令通常用于存储器中读取 32 位的字数据套通用寄存器中，然后对数据进行处理。</p>
+</blockquote>
+
+<p>此处是通过 x0 寄存器指向的 64 位字数据来加载 <code class="highlighter-rouge">self</code> 的 isa。<code class="highlighter-rouge">x13</code> 寄存器现在则存储着 <code class="highlighter-rouge">isa</code> 指针。</p>
+
+		
+	</div>
+</article>
+
+
+
+	  </main>
+		
+		  <!-- Pagination links -->
+      
+
+	  </div>
+	    
+	    <!-- Footer -->
+	    <footer>
+    <span>&#169;2017 - <a href="https://github.com/idevqa"> Devqa </a></span> Group <br />
+    <span>This site is powed by Jekyll</span>
+
+</footer>
+
+
+	    <!-- Script -->
+      <script src="/js/main.js"></script>	
+
+
+	</div>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+ <title>FridayQ&A 中文版</title>
+ <link href="http://localhost:4000/atom.xml" rel="self"/>
+ <id>http://localhost:4000</id>
+ <updated>2017-08-20T21:14:15+08:00</updated>
+ <author>
+   <name>Friday Q&A 中文</name>
+   <uri>http://idevqa.github.io/FridayQA/</uri>
+   <email>gua@desgard.com</email>
+ </author>
+
+ 
+
+ <entry>
+   <title>Friday Q&A 2017-07-14: Swift.Codable</title>
+   <link href="http://localhost:4000/Swift-Codable"/>
+   <id>http://localhost:4000/Swift-Codable</id>
+   <updated>2017-07-14T00:00:00+08:00</updated>
+   <content type="html">&lt;p&gt;原文：&lt;a href=&quot;https://www.mikeash.com/pyblog/friday-qa-2017-07-14-swiftcodable.html&quot;&gt;Swift.Codable&lt;/a&gt;&lt;/p&gt; &lt;hr /&gt; &lt;p&gt;Swift 4 中有趣的扩展之一就是 &lt;code class=&quot;highlighter-rouge&quot;&gt;Codable&lt;/code&gt; 协议和其组合策略。这也就是我最近十分关注的一个主题，所以今天我们来讨论它是什么，以及它是如何工作的。&lt;/p&gt; &lt;h2 id=&quot;序列化---serialization&quot;&gt;序列化 - Serialization&lt;/h2&gt; &lt;p&gt;将值类型对象序列化后存储至磁盘上或是通过为网络进行传输是十分常见的需求。尤其现在的移动应用时代，再家常便饭不过了。&lt;/p&gt; &lt;p&gt;迄今为止，Apple 的生态系统开发中的序列化选择十分有限：&lt;/p&gt; &lt;ol&gt; &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NSCoding&lt;/code&gt; 提供了对复杂对象的自动序列化方案，并且可以与自定义类兼容，但是十分不适合跨平台数据序列化方案，人就需要手动编写编码和解码的特定方法。&lt;/li&gt; &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NSPropertyListSerialization&lt;/code&gt; 和 &lt;code class=&quot;highlighter-rouge&quot;&gt;NSJSONSerialization&lt;/code&gt; 可以在 Cocoa 中的 &lt;code class=&quot;highlighter-rouge&quot;&gt;NSDictionary/NSString&lt;/code&gt; 或属性列表(property list)与 JSON 格式数据进行转换。JSON 十分适用于与服务器的数据交互。由于在广大的 API 中有很多外层值是不必要的，因此需要编写很多代码用于提取有意义的值。这些代码总是具有 ad-hoc 特点（译者认为代表的是耦合性极强，仅适用于单一场景的意思），并且处理其他可能性数据具有较差的兼容性。&lt;/li&gt; &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NSXMLParser&lt;/code&gt; 和 &lt;code class=&quot;highlighter-rouge&quot;&gt;NSXMLDocument&lt;/code&gt; 是适用于 XML 为数据格式传输的系统中。但是对于数据的解析以及模型转换规则仍旧需要开发者来自行实现。&lt;/li&gt; &lt;li&gt;最后，完全自己实现编码转换。这是很有趣的过程，但是工作量巨大且容易出错。&lt;/li&gt; &lt;/ol&gt;...</content>
+ </entry>
+
+ 
+
+ <entry>
+   <title>Friday Q&A 2017-06-30: 深入理解 ARM64 中的 objc_msgSend 实现</title>
+   <link href="http://localhost:4000/Dissecting-objc_msgSend-on-ARM64"/>
+   <id>http://localhost:4000/Dissecting-objc_msgSend-on-ARM64</id>
+   <updated>2017-06-30T00:00:00+08:00</updated>
+   <content type="html">&lt;p&gt;原文：&lt;a href=&quot;https://www.mikeash.com/pyblog/friday-qa-2017-06-30-dissecting-objc_msgsend-on-arm64.html&quot;&gt;Dissecting objc_msgSend on ARM64&lt;/a&gt;&lt;/p&gt; &lt;hr /&gt; &lt;p&gt;我们回来了！WWDC 期间，我在 CocoaConf Next Door 上发言，其中一个专题的内容是关于 &lt;code class=&quot;highlighter-rouge&quot;&gt;objc_msgSend&lt;/code&gt; 在 ARM64 架构中的实现。所以决定将其撰写成一篇文章并加入至 Friday Q&amp;amp;A 专题中。&lt;/p&gt; &lt;h2 id=&quot;总览&quot;&gt;总览&lt;/h2&gt; &lt;p&gt;每一个 Objective-C 对象都拥有一个类，每个类都有自己的方法列表。每个方法都拥有选择子、一个指向实现的函数指针和一些元数据（metadata）。&lt;code class=&quot;highlighter-rouge&quot;&gt;objc_msgsend&lt;/code&gt; 的工作是使用对象和选择子来查询对应的函数指针，从而跳转到该方法的位置中。&lt;/p&gt; &lt;p&gt;查找的方法可能十分复杂。如果一个方法在当前类中无法查询，那么可能需要在其父类中继续查询。当在父类中也无法找到，则开始调用 runtime 中的消息转发机制。如果这是发送到该类的第一条信息，那么它将会调用该类的 &lt;code class=&quot;highlighter-rouge&quot;&gt;+initialize&lt;/code&gt; 方法。&lt;/p&gt; &lt;p&gt;一般情况下，查找的方法需要迅速完成。这与其复杂的查找机制似乎是矛盾的。&lt;/p&gt; &lt;p&gt;Objective-C 解决这个矛盾的方法是利用&lt;strong&gt;方法缓存(Method Cache)&lt;/strong&gt;。每个类都有一个缓存，它将方法存储为一组选择子和函数指针，在 Objective-C 中被称为 IMP。它们被组织成哈希表的结构，所以查找速度十分迅速。当需要查找方法时，runtime 首先会查询缓存。如果结构不被命中，则开始那一套复杂的查询过程，并将结果存储至缓存，以便下次快速查询。&lt;/p&gt; &lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;objc_msgSend&lt;/code&gt; 是使用汇编语言编写的。其原因是：其一是使用纯 C 是无法编写一个携带未知参数并跳转至任意函数指针的方法。单纯从语言角度来讲，也没有必要增加这样的功能。其二，对于 &lt;code class=&quot;highlighter-rouge&quot;&gt;objc_msgSend&lt;/code&gt; 来说速度是最重要的，只用汇编来实现是十分高效的。&lt;/p&gt;...</content>
+ </entry>
+
+ 
+
+ <entry>
+   <title>Friday Q&A 2015-07-17: Swift 中什么时候使用 Struct 和 Class</title>
+   <link href="http://localhost:4000/When-to-Use-Swift-Structs-and-Classes"/>
+   <id>http://localhost:4000/When-to-Use-Swift-Structs-and-Classes</id>
+   <updated>2015-07-17T00:00:00+08:00</updated>
+   <content type="html">&lt;p&gt;原文：&lt;a href=&quot;https://www.mikeash.com/pyblog/friday-qa-2015-07-17-when-to-use-swift-structs-and-classes.html&quot;&gt;When to Use Swift Structs and Classes&lt;/a&gt;&lt;/p&gt; &lt;p&gt;译文转载于 &lt;a href=&quot;http://swift.gg/2015/08/14/friday-qa-2015-07-17-when-to-use-swift-structs-and-classes/&quot;&gt;SwiftGG&lt;/a&gt; 翻译组。&lt;/p&gt; &lt;hr /&gt; &lt;p&gt;在Swift的世界中一个一直被持续不断讨论话题就是什么时候使用结构体什么时候使用类。我想我今天要贡献一些自己的想法。&lt;/p&gt; &lt;h2 id=&quot;值-vs-引用&quot;&gt;值 VS 引用&lt;/h2&gt; &lt;p&gt;答案其实很简单：当你需要值语义（值语义是指一个对象被系统标准的复制方式复制之后，与被复制的对象之间毫无关系，彼此独立改变且互不影响）的时候使用结构体，当你需要引用语义（引用语义是指一个对象被系统标准的复制方式复制后，与被复制的对象之间依然共享底层资源，对其中一个的改变都将影响到另外一个）的时候使用类。就是这样！ 欢迎下周再来。。。 等等！ 怎么了？ 这没有回答这个问题 什么意思？就是这样的啊！ 是的，但是。。。 但是什么？ 什么是值语义和引用语义呢？ 哦，这个啊。也许我接下来应该讲讲这个。 并且他们怎么和结构体和类相关联的呢？ 好的。&lt;/p&gt; &lt;p&gt;所有的问题都归结于数据和数据被存储在什么地方。我们通常将数据存在在局部变量、参数、属性以及全局变量中。从根本上说有两种不同的方法将数据存储在所有这些地方。&lt;/p&gt; &lt;p&gt;值语义中，数据直接存在于被存储的位置。引用语义中，数据存在于别的地方，而存储的位置中存储着一个对数据的引用。当你获取数据的时候这种差别可能不那么明显。而当你拷贝那块存储区域时这种不同就会显现出来。值语义中，你会获的原数据的一个新拷贝，而引用语义下，你会获的同样数据的引用的一个新拷贝。&lt;/p&gt; &lt;p&gt;这真的很抽象。让我们来看一个例子，暂时把 Swift 的这个问题从你脑海中移除，让我们来看一个 Objective-C 的例子：&lt;/p&gt; &lt;pre&gt;&lt;code class=&quot;language-ObjC&quot;&gt;@interface SomeClass : NSObject @property int number; @end @implementation SomeClass @end...</content>
+ </entry>
+
+ 
+
+ <entry>
+   <title>Friday Q&A 2014-11-07: 实现 NSZombie</title>
+   <link href="http://localhost:4000/Let-s-Build-NSZombie"/>
+   <id>http://localhost:4000/Let-s-Build-NSZombie</id>
+   <updated>2014-11-07T00:00:00+08:00</updated>
+   <content type="html">&lt;p&gt;原文：&lt;a href=&quot;https://www.mikeash.com/pyblog/friday-qa-2014-11-07-lets-build-nszombie.html&quot;&gt;Let’s Build NSZombie&lt;/a&gt;&lt;/p&gt; &lt;hr /&gt; &lt;p&gt;Zombies 是用来调试内存管理问题的有效工具。我之前讨论过 &lt;a href=&quot;https://www.mikeash.com/pyblog/friday-qa-2011-05-20-the-inner-life-of-zombies.html&quot;&gt;Zombies 的实现&lt;/a&gt;，这次我要更进一步通过代码来构造他们，这个话题的发起者是 Шпирко Алексей。&lt;/p&gt; &lt;h2 id=&quot;回顾&quot;&gt;回顾&lt;/h2&gt; &lt;p&gt;Zombies 可以检测内存管理错误，具体来讲，当对一个被释放的 Objective-C 对象发送消息时会被检测到。这就是 “Use After Free” 问题的一个真实场景。&lt;/p&gt; &lt;p&gt;通常情况下，向某个对象发送消息时，该对象可能已经被覆写或是回收至 kernel。不论被复写还是已经被回收都会导致 crash。由于其他 Objective-C 对象的内存覆盖，这个消息将发送到与目的实例对象无关的个体，将会使得 selector 抛出异常，如果这个消息同名存在，则会导致结果的异常不可控。&lt;/p&gt; &lt;p&gt;也有可能该段内存还未被使用，仍旧是一个初始状态，即我们所说的 &lt;code class=&quot;highlighter-rouge&quot;&gt;dealloc&lt;/code&gt; 状态。这会导致各种崩溃【注：原文是 ‘lead to other interesting and bizarre falures’】。举个例子，如果对象包括一个 UNIX 文件 handle【注：传统翻译为 ‘文件句柄’，译者任务 handle 翻译成 ‘句柄’ 很奇怪】，也许会对文件的描述对象调用两次 &lt;code...</content>
+ </entry>
+
+ 
+
+</feed>
