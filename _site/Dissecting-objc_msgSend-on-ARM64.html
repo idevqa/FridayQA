@@ -12,6 +12,7 @@
 
 	<!-- CSS & fonts -->
 	<link rel="stylesheet" href="/css/main.css">
+	<link rel="stylesheet" href="/css/comment.css">
 
 	<!-- RSS -->
 	<link href="/atom.xml" type="application/atom+xml" rel="alternate" title="ATOM Feed" />
@@ -119,9 +120,9 @@
       
 
     <!-- Main content -->
-	  <div id="container">
+	  <!-- <div id="container">
 		  
-		<main>
+		<main> -->
 
 			<article id="post-page">
 	<h2>Friday Q&A 2017-06-30: 深入理解 ARM64 中的 objc_msgSend 实现</h2>		
@@ -424,6 +425,22 @@
 		
 	</div>
 </article>
+
+<!-- Powered by gitment -->
+<div id="container"></div>
+<script src="https://imsun.github.io/gitment/dist/gitment.browser.js"></script>
+<script>
+var gitment = new Gitment({
+    id: '/Dissecting-objc_msgSend-on-ARM64', // 可选。默认为 location.href
+    owner: 'Desgard',
+    repo: 'HackSwjtu.github.io',
+    oauth: {
+        client_id: '0e54c71741ffae6efae8',
+        client_secret: 'cf4aff235eed77e22eaee7f4efec873b0ac16698',
+    },
+})
+gitment.render('container')
+</script>
 
 
 

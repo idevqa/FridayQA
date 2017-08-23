@@ -1,0 +1,15 @@
+<!-- Powered by gitment -->
+<div id="container"></div>
+<script src="https://imsun.github.io/gitment/dist/gitment.browser.js"></script>
+<script>
+var gitment = new Gitment({
+    id: '{{ page.url }}', // 可选。默认为 location.href
+    owner: 'Desgard',
+    repo: 'HackSwjtu.github.io',
+    oauth: {
+        client_id: '0e54c71741ffae6efae8',
+        client_secret: 'cf4aff235eed77e22eaee7f4efec873b0ac16698',
+    },
+})
+gitment.render('container')
+</script>
