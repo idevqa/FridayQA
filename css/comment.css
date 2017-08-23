@@ -130,7 +130,7 @@ a.gitment-header-issue-link:hover {
 .gitment-editor-avatar svg {
   width: 44px;
   height: 44px;
-  border-radius: 3px;
+  border-radius: 22px;
 }
 
 .gitment-editor-avatar .gitment-github-icon {
@@ -158,7 +158,7 @@ a.gitment-header-issue-link:hover {
   pointer-events: none;
   content: "";
   border-color: transparent;
-  border-style: solid solid outset;
+  /* border-style: solid solid outset; */
 }
 
 .gitment-editor-main::before,
