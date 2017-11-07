@@ -1,0 +1,116 @@
+---
+title: "Friday Q&A 2017-09-22: Swift 4 Weak References"
+description: 之前在 Swift 开源后的不久，我写了一篇关于弱引用如何实现 - [Swift Weak References](https://mikeash.com/pyblog/friday-qa-2015-12-11-swift-weak-references.html)的文章。而现在版本的 Swift 做出了改变。下面我来谈谈当前版本的的实现方式，以及与旧版本的差异。这也是 Guilaume Lessard 的一个提议的 topic。
+header: "Friday Q&A 2017-09-22: Swift 4 Weak References"
+author: 冬瓜
+---
+
+原文：[Swift 4 Weak References](https://www.mikeash.com/pyblog/friday-qa-2017-09-22-swift-4-weak-references.html)
+
+---
+
+之前在 Swift 开源后的不久，我写了一篇关于弱引用如何实现 - [Swift Weak References](https://mikeash.com/pyblog/friday-qa-2015-12-11-swift-weak-references.html)的文章。而现在版本的 Swift 做出了改变。下面我来谈谈当前版本的的实现方式，以及与旧版本的差异。这也是 Guilaume Lessard 的一个提议的 topic。
+
+## 旧的实现方式
+
+为了那些忘记了或是不喜欢阅读原先实现文章的读者，我们在此处简单的介绍一下。
+
+在旧的实现中，Swift 对象有两个引用计数：强引用计数和弱引用计数。当强引用计数到达 0 而弱引用计数为零，对象将被销毁，但是内存还属于未释放状态。而这些弱引用的指针则沦为 Zombie Object 而继续存储在内存中。
+
+当弱引用被 load 的时候，Runtime 机制将会检查对象是否为 Zombie Object。如果是，将会使其弱引用计数归零，从而内存的存储区域将会被释放。这意味着如果我们对这些弱引用对象进行访问或调用，其 Zombie Object 将会被清除。
+
+我喜欢这个实现方式的简洁，但是会有一些缺陷。其中之一就是 Zombie Object 会在内存中存储很久一段时间。对于大型复杂的类（包含很多属性，或是类似于 `ManagedBuffer` 这种需要为其分配额外的内存空间），这可能会造成严重的空间浪费。
+
+另外一个问题是，这种方式**不是线程安全的**，在[这篇古老的文章中](https://bugs.swift.org/browse/SR-192)中也有介绍。这是一个需要去修补的漏洞，开发者要在外部显示声明是弱引用类型，才能解决这个问题。
+
+## Object Data
+
+在 Swift 中有很多数据类型也扮演着 “对象”。
+
+最明显的莫过于那些声明的属性，可以由开发者直接访问到。
+
+其次是那些实例所对应的 Class 类。他们用来 Dynamic Dispatch（动态调度），并且 `type(of:)` 方法也是基于这些数据来实现的。这里的具体实现是不对外暴露的，但是 Dynamic Dispatch 技术和 `type(of:)` 方法都说明 Class 类是存在的。
+
+还有就是另类的引用计数。这些都是完全封装起来的，当然你可以去调用 `CFGetRetainCount` 来获取他们的信息。
+
+最后，在 Objective-C 的 Runtime 中还会存有一些辅助信息列表，例如 Objective-C 中的弱引用（）列表（弱引用的列表中的元素会指向每一个弱引用对象）和 Associated Object（关联对象）。
+
+那么他们存在什么地方呢？
+
+在 Objective-C 中，Class 以及其属性（例如实例变量）都存储在该对象的内存空间中。Class 类占据着第一个指针大小的区域，后面依次存储着实例变量。一些辅助信息则存储在额外的区域。当你操作一个 Associated Object 的时候，Runtime 会从一个很庞大的 Hash 表中查询，这个 Hash 表由对象的地址作为 key。在检索期间需要加锁以防止多线程访问问题，所以会对速度有一定的影响。而引用计数有时存储在对象的内存区域，还有时存储在外部，这取决于正在运行的操作系统的版本以及 CPU 架构类型。
+
+旧版 Swift 的实现中，Class、引用计数以及 Class 的属性全部以 inline （内联）方式存储。额外的辅助信息仍旧存在一个独立的表中。
+
+抛开编程语言，我们来思考这样一个问题：*它们应该如何处理？*
+
+应该权衡每一个方面。存储在对象的内存区域中虽然可以快速访问，但是会占用一些空间。存储在外部的表中数据访问较慢，但是不需要和对象争夺空间。
+
+这也就是 Objective-C 没有将引用计数存储在对象自身存储中的原因之一。Objective-C 引用计数机制是很久之前的历史原因，当时计算机的硬件存储空间十分有限。一个 Objective-C 写出的程序中有很多对象仅仅拥有一个持有者，因此引用计数为 `1`。然而存储一个 `1` 来占用整个 `4` 个 byte 是十分浪费的。所以通过外部表，可以通过 *absence of an entry* 的方式（译者注：还不清楚是一个什么技术），从而减少内存的使用量。
+
+每个对象都有一个 Class，并且不断的访问。每一个动态方法都需要调用它。所以应该放在对象的内存区中。没有外部节省。
+
+存储的属性理想状态是尽量的快速读取。一个对象是否有属性这个是在编译期确定的。那些没有任何属性的对象则不需要为属性在内存中分配空间。这是他们最理想的地方。
+
+每个对象都有引用计数。但是并不是每个对象的引用计数都是 `1`，虽然为 `1` 的情况很常见。并且如今的内存已经足够大了。我们可以考虑将其放入对象的内存区。
+
+大多数对象没有任何弱引用或者 Associated Object。在对象的内存中开辟这些空间无疑是浪费的，应该存储在外部表中。
+
+这就是正确的权衡，但是仍旧令人恼火。对于具有弱引用和 Associated Object 的对象，他们的读取效率低下。如何来解决这个问题呢？
+
+## Side Tables
+
+新版本 Swift 的弱引用实现方式提出了一个 **Side Table** 概念。
+
+Side Table 是一个独立的内存区域，用来存储对象的附加信息。这是一个可选的，这就说明每个对象都可能有一个 Side Table 区域，也有可能没有。需要 Side Table 的对象会开辟额外的空间，反之不然。
+
+每个对象都有一个指向其对应的 Side Table 的指针，Side Table 也有一个指向对应对象的指针。这样就使得 Side Table 可以存储关于对象的额外信息，以及其 Associated Object。
+
+为了避免固定 `8` 比特的预留机制，Swift 在其中做了一个优化。起始位第一个存储的是 Class 对象，紧接着的是对象的引用计数。如果当这个对象需要一个 Side Table 的时候，则将引用计数位的位置给 Side Table 指针让位。由于引用计数是不能丢弃的，所有后面仍旧存放引用计数。这两种情况是通过一个 byte 位来记录的，这个位标明了该对象的下一位置是存放引用计数还是 Side Table 表的引用。
+
+Side Table 允许 Swift 仍旧保留前版的维护一个弱引用技术表的结构，并同时修复了之前的不足。现在的弱引用是指向 Side Table 的，而不是向之前的那样直接指向对象。
+
+由于已知 Side Table 是轻量的，因此不会造成内存开辟空间过大的浪费，所以之前的问题就不存在了。所以我们要注意这样一个多线程问题：不要过早的将弱应用清空。由于 Side Table 轻量，所以其弱应用可以单独存留知道这些引用被重写或是销毁。
+
+我们另外需要注意到的问题是，Side Table 只会保存引用计数和原始对象的指针。而 Associated Object 的场景是我们假想的。Swift 没有内置的 Associated Object 功能，Objective-C 的 API 会仍旧使用全局的弱引用表。
+
+> 译者注：在 Swift 中 `import ObjectiveC` 之后，即可调用 *Associated Object* 的接口：
+
+```swift
+import Foundation
+import ObjectiveC
+
+class MyClass {}
+
+private var AssociatedObjectHandle: UInt8 = 0
+
+extension MyClass {
+    var stringProperty:String {
+        get {
+            return objc_getAssociatedObject(self, &AssociatedObjectHandle) as! String
+        }
+        set {
+            objc_setAssociatedObject(self, &AssociatedObjectHandle, newValue, objc_AssociationPolicy.OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+    }
+}
+```
+
+## 相关代码
+
+由于 Swift 是开源的，这些源码都是可以访问的。
+
+关于 Side Table 的相关信息可以从这里找到 [RefCount.h](https://github.com/apple/swift/blob/c262440e70896299118a0a050c8a834e1270b606/stdlib/public/runtime/WeakReference.h)。
+
+新版本的弱引用 API，以及关于整个系统的注释说明，可以在这里找到 [WeakReference.h](https://github.com/apple/swift/blob/c262440e70896299118a0a050c8a834e1270b606/stdlib/public/runtime/WeakReference.h)。
+
+
+以及一些关于如何在堆上分配对象的说明和注释，可以从这里找到[HeapObject.cpp](https://github.com/apple/swift/blob/c262440e70896299118a0a050c8a834e1270b606/stdlib/public/runtime/HeapObject.cpp)。
+
+我已将所有的相关文件及具体提交记录的连接放出，便于您在阅读文章时更加深入的了解这些知识。如果你想看到最新的变更，请切到 master 分支上。
+
+## 总结
+
+弱引用是一个计算机语言重要的特性。Swift 之前的实现方式也是很不错的，有一些优点但也有不足。在新版本中通过一个添加 Optional 的 Side Table 从而优美的解决了一些问题，并同时兼容了之前的实现方式。Side Table 的引入将会为 Swift 的未来开辟了很多可能性。
+
+
+
