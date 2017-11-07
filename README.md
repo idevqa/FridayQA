@@ -12,7 +12,7 @@
 
 | 日期 | 原文 | 译文 |
 | ------| ------ | ------ |
-| 2017-09-22 | [Swift 4 Weak References](https://www.mikeash.com/pyblog/friday-qa-2017-09-22-swift-4-weak-references.html) | [Swift 4 弱引用]() |
+| 2017-09-22 | [Swift 4 Weak References](https://www.mikeash.com/pyblog/friday-qa-2017-09-22-swift-4-weak-references.html) | [Swift 4 弱引用](https://github.com/idevqa/FridayQA/blob/master/2017/2017-09-22.md) |
 | 2017-07-28 | [A Binary Coder for Swift](https://www.mikeash.com/pyblog/friday-qa-2017-07-28-a-binary-coder-for-swift.html) | This week. |
 | 2017-07-14 | [Swift.Codable](https://www.mikeash.com/pyblog/friday-qa-2017-07-14-swiftcodable.html) | [Swift Codable 协议实现](https://github.com/idevqa/FridayQA/blob/master/2017/2017-07-14.md) |
 | 2017-06-30 | [Dissecting objc_msgSend on ARM64](https://www.mikeash.com/pyblog/friday-qa-2017-06-30-dissecting-objc_msgsend-on-arm64.html) | [深入理解 ARM64 中的 objc_msgSend 实现](https://github.com/Desgard/FridayQA/blob/master/2017/2017-06-30.md) |
